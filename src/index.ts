@@ -13,7 +13,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { GreenInvoiceClient } from "./client.js";
-import { registerTools } from "./tools.js";
+import { registerTools } from "./tools/index.js";
 
 const API_ID = process.env.GREENINVOICE_API_ID;
 const API_SECRET = process.env.GREENINVOICE_API_SECRET;

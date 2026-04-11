@@ -3,3 +3,5 @@ dist/
 .env
 .env.local
 *.tgz
+.claude/settings.local.json
+.mcp.json

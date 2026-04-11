@@ -6,7 +6,7 @@ An MCP (Model Context Protocol) server that provides AI assistants with access t
 
 ## Features
 
-- **Full API coverage** -- All 66 Green Invoice API endpoints across 10 consolidated tools
+- **Full API coverage** -- All 66 Green Invoice API endpoints across 43 purpose-specific tools
 - **Documents** -- Create, search, update, close, reopen, send, preview invoices, receipts, quotes, and all document types
 - **Clients** -- Full client management (CRUD, search, merge, balance, document association)
 - **Suppliers** -- Supplier management for expense tracking (CRUD, search, merge)
@@ -134,22 +134,92 @@ If you cloned the repo locally:
 }
 ```
 
-## Available Tools (10 consolidated tools, 66 endpoints)
+## Available Tools (43 tools, 66 endpoints)
 
-Each tool uses an `action` parameter to select the operation, and a `data` JSON string for request parameters.
+Each tool has fully typed input parameters — the AI assistant can see every available field, its type, and a description. No more passing opaque JSON strings.
 
-| Tool | Actions | Description |
-|------|---------|-------------|
-| `account` | get, settings | Account info and settings |
-| `business` | list, get, update, get_numbering, set_numbering, get_footer, get_types, upload_file, delete_file | Business configuration and management |
-| `document` | search, get, create, update, close, open, send, download_links, add_payment, preview, get_linked, get_info, get_types, get_statuses, search_payments | Full document lifecycle (invoices, receipts, quotes, etc.) |
-| `client` | search, get, create, update, delete, associate_docs, merge, update_balance | Client management |
-| `supplier` | search, get, create, update, delete, merge | Supplier management (for expenses) |
-| `item` | search, get, create, update, delete | Product/service catalog |
-| `expense` | search, get, create, update, delete, open, close, get_statuses, get_classifications, search_drafts | Expense tracking and reporting |
-| `payment` | get_form, search_tokens, charge_token, create_link, get_link, get_link_status | Online payments and payment links |
-| `webhook` | create, get, delete | Webhook subscriptions |
-| `reference_data` | occupations, countries, cities, currencies | Reference/lookup data (no auth required) |
+### Account
+| Tool | Description |
+|------|-------------|
+| `account-get` | Get account information (GET /account/me) |
+| `account-get-settings` | Get account settings (GET /account/settings) |
+
+### Business
+| Tool | Description |
+|------|-------------|
+| `business-list` | List all businesses (GET /businesses) |
+| `business-get-info` | Get business, numbering, footer, or types (action: get/numbering/footer/types) |
+| `business-update` | Update business or manage files (action: update/set-numbering/upload-file/delete-file) |
+
+### Documents
+| Tool | Description |
+|------|-------------|
+| `document-search` | Search documents by type, status, date, client, etc. |
+| `document-search-payments` | Search payment transactions within documents |
+| `document-get` | Get a document by ID |
+| `document-get-linked` | Get documents linked to a document |
+| `document-get-download-links` | Get PDF download URLs |
+| `document-get-reference` | Get document types, statuses, or type info (action: types/statuses/info) |
+| `document-create` | Create a new document with fully typed fields |
+| `document-preview` | Preview a document as base64 PDF |
+| `document-update` | Update an existing draft document |
+| `document-close` | Close (finalize) a document |
+| `document-open` | Reopen a manually-closed document |
+| `document-send` | Send a document to the client via email |
+| `document-add-payment` | Record a payment received against a document |
+
+### Clients
+| Tool | Description |
+|------|-------------|
+| `client-search` | Search clients |
+| `client-get` | Get a client by ID |
+| `client-manage` | Create, update, delete, merge, or associate documents (action: create/update/delete/merge/associate-docs/update-balance) |
+
+### Suppliers
+| Tool | Description |
+|------|-------------|
+| `supplier-search` | Search suppliers |
+| `supplier-get` | Get a supplier by ID |
+| `supplier-manage` | Create, update, delete, or merge suppliers (action: create/update/delete/merge) |
+
+### Items (Product/Service Catalog)
+| Tool | Description |
+|------|-------------|
+| `item-search` | Search catalog items |
+| `item-manage` | Get, create, update, or delete items (action: get/create/update/delete) |
+
+### Expenses
+| Tool | Description |
+|------|-------------|
+| `expense-search` | Search expenses or expense drafts (action: expenses/drafts) |
+| `expense-get` | Get an expense by ID |
+| `expense-get-reference` | Get expense statuses or accounting classifications (action: statuses/classifications) |
+| `expense-manage` | Create, update, delete, open, or close expenses (action: create/update/delete/open/close) |
+
+### Payments
+| Tool | Description |
+|------|-------------|
+| `payment-get-form` | Generate a hosted payment form URL |
+| `payment-search-tokens` | Search saved credit card tokens |
+| `payment-charge-token` | Charge a saved credit card token |
+| `payment-create-link` | Create a shareable payment link |
+| `payment-get-link` | Get payment link details |
+| `payment-get-link-status` | Check payment link status |
+
+### Webhooks
+| Tool | Description |
+|------|-------------|
+| `webhook-create` | Create a webhook subscription |
+| `webhook-get` | Get a webhook by ID |
+| `webhook-delete` | Delete a webhook |
+
+### Reference Data (no authentication required)
+| Tool | Description |
+|------|-------------|
+| `reference-get-occupations` | Get business category/occupation types |
+| `reference-get-countries` | Get supported countries |
+| `reference-get-cities` | Get cities for a given country |
+| `reference-get-currencies` | Get current exchange rates |
 
 ## Document Type Reference
 
@@ -178,6 +248,7 @@ See [API_REFERENCE.md](API_REFERENCE.md) for the complete endpoint reference (66
 
 ## MCP Validation Notes
 
+- **11/04/2026**: Refactored from 10 consolidated tools with untyped `data: string` parameters to 43 purpose-specific tools with fully typed Zod schemas. Each tool now exposes every available field with its type and description, giving AI assistants full schema visibility. Source split into `src/tools/` directory by resource group.
 - **03/04/2026**: Consolidated from 29 individual tools to 10 resource-based tools. Added full API coverage (66 endpoints) including suppliers, expenses, payments, partners reference data, and previously missing document/business/client endpoints. API spec sourced from Apiary blueprint (updated 2026-03-11).
 - **01/04/2026**: Validated against the [Green Invoice API docs](https://www.greeninvoice.co.il/api-docs/). Basic business document functions tested: create invoice/receipt, issue. All tools worked as expected.
   - Removed `delete_document` tool -- not supported by the API (no `DELETE /documents/{id}` endpoint exists).
