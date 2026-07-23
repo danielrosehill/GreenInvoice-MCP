@@ -153,16 +153,27 @@ Each tool uses an `action` parameter to select the operation, and a `data` JSON 
 
 ## Document Type Reference
 
+Complete list as returned by `GET /documents/types` (verified against the live API, 2026-07-23):
+
 | Code | Type |
 |------|------|
-| 10 | Price Quote |
-| 100 | Order |
+| 10 | Price Quotation |
+| 20 | Bill / Payment Confirmation |
+| 100 | Order (sales order / order confirmation) |
 | 200 | Delivery Note |
+| 210 | Return Delivery |
+| 300 | Proforma Invoice (חשבון עסקה) |
 | 305 | Tax Invoice |
 | 320 | Tax Invoice + Receipt |
-| 330 | Credit Invoice (Refund) |
+| 330 | Credit Note (Refund) |
 | 400 | Receipt |
 | 405 | Donation Receipt |
+| 410 | Cancel Donation |
+| 500 | Purchase Order (הזמנת רכש, issued to a supplier) |
+| 600 | Deposit Receipt |
+| 610 | Deposit Withdrawal |
+
+There is no RFQ (request-for-quotation) document type — quotations are outbound only. For type 500 the document's `client` object holds the supplier being ordered from; supplier records themselves are managed with the `supplier` tool (search, get, create, update, delete, merge).
 
 ## Important API Notes
 

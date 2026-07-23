@@ -30,7 +30,7 @@ function parseData(raw?: string): unknown {
 
 // ── Reference enums (embedded in descriptions) ────────────────────────
 
-const DOC_TYPES = `Document type codes: 10=Price Quote, 100=Order, 200=Delivery Note, 210=Return Delivery Note, 300=Transaction Account, 305=Tax Invoice, 320=Tax Invoice+Receipt, 330=Credit Invoice, 400=Receipt, 405=Donation Receipt, 500=Purchase Order, 600=Deposit Receipt, 610=Deposit Withdrawal`;
+const DOC_TYPES = `Document type codes (per GET /documents/types): 10=Price Quotation, 20=Bill/Payment Confirmation, 100=Order (sales order/order confirmation), 200=Delivery Note, 210=Return Delivery, 300=Proforma Invoice (חשבון עסקה), 305=Tax Invoice, 320=Tax Invoice+Receipt, 330=Credit Note, 400=Receipt, 405=Donation Receipt, 410=Cancel Donation, 500=Purchase Order (הזמנת רכש, issued to a supplier), 600=Deposit Receipt, 610=Deposit Withdrawal. There is no RFQ document type (price quotations are outbound only).`;
 
 const DOC_STATUSES = `Document statuses: 0=Open, 1=Closed, 2=Manually Closed, 3=Canceling, 4=Canceled`;
 
@@ -116,7 +116,7 @@ Actions: "get" = account info (GET /account/me), "settings" = account settings (
 Actions:
 "search" = search documents (data: {page, pageSize, type:[], status:[], fromDate, toDate, sort, clientId, clientName, description, number, paymentTypes:[], download})
 "get" = get by ID (data: {"id":"..."})
-"create" = create document. IMPORTANT field names: 'income' (not 'items'), 'payment' (not 'payments'), 'remarks' (not 'notes'), 'lang' (not 'language'), 'emails' (array). Types 320,400,405 REQUIRE payment array. Set client.add=true to auto-create client. Data: {type, client:{id,name,emails,taxId,address,city,zip,country,phone,add,self}, income:[{catalogNum,description,quantity,price,currency,vatType,itemId}], payment:[{date,type,price,currency,bankName,bankBranch,bankAccount,chequeNum}], currency,lang,description,remarks,footer,emailContent,signed,rounding,attachment,date,dueDate,discount:{amount,type},maxPayments,linkedDocumentIds,linkedPaymentId}
+"create" = create document (works for ALL types above, incl. 100=Order and 500=Purchase Order). IMPORTANT field names: 'income' (not 'items'), 'payment' (not 'payments'), 'remarks' (not 'notes'), 'lang' (not 'language'), 'emails' (array). Types 320,400,405 REQUIRE payment array. Set client.add=true to auto-create client. For type 500 the 'client' object holds the SUPPLIER being ordered from (document recipient); manage supplier records themselves with the 'supplier' tool. Data: {type, client:{id,name,emails,taxId,address,city,zip,country,phone,add,self}, income:[{catalogNum,description,quantity,price,currency,vatType,itemId}], payment:[{date,type,price,currency,bankName,bankBranch,bankAccount,chequeNum}], currency,lang,description,remarks,footer,emailContent,signed,rounding,attachment,date,dueDate,discount:{amount,type},maxPayments,linkedDocumentIds,linkedPaymentId}
 "update" = update document (data: {"id":"...", ...fields})
 "close" = close document (data: {"id":"..."})
 "open" = reopen document (data: {"id":"..."})
