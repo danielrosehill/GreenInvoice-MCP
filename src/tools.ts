@@ -341,7 +341,8 @@ Actions:
     "expense",
     `Manage expenses (outcome tracking). ${PAYMENT_TYPES}.
 Expense statuses: 10=Open, 20=Reported.
-Expense document types: 10=Invoice, 20=Receipt, 30=Invoice+Receipt, 40=Other.
+Expense documentType uses the same document-type codes as documents (NOT a 10/20/30/40 enum): e.g. 305=Tax Invoice, 320=Tax Invoice+Receipt (חשבונית מס קבלה), 400=Receipt, 300=Proforma. Verified 2026-07-24: passing 30 fails with 3308 "invalid expense document type"; 320 works.
+IMPORTANT create requirements (verified 2026-07-24): reportingDate is required (else 3308->3310 "invalid reporting month"); accountingClassification is required (else 3312 "please fill in expense type details") — get valid ids/keys via get_classifications.
 
 Actions:
 "search" = search expenses (data: {page, pageSize, fromDate, toDate, dueDate, description, supplierId, supplierName, number, paid, reported, sort, minAmount, maxAmount, accountingClassificationId})

@@ -168,6 +168,16 @@
 | 20 | Reported |
 
 ### Expense Document Types
+> **Corrected 2026-07-24:** the live `/expenses` endpoint does **not** accept a `10/20/30/40`
+> enum (the old Apiary blueprint value below is stale — `30` returns error 3308 "invalid expense
+> document type"). `documentType` on expenses uses the **same document-type codes as documents**
+> (see the Document Types table above): e.g. `305`=Tax Invoice, `320`=Tax Invoice+Receipt
+> (חשבונית מס קבלה), `400`=Receipt. Expense `create` also **requires** `reportingDate` (else 3310
+> "invalid reporting month") and an `accountingClassification` (else 3312 "please fill in expense
+> type details"; get valid ids via `GET /accounting/classifications/map`).
+
+Stale blueprint values (do not use for `/expenses`):
+
 | Code | Type |
 |------|------|
 | 10 | Invoice |
