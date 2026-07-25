@@ -6,7 +6,7 @@ An MCP (Model Context Protocol) server that provides AI assistants with access t
 
 ## Features
 
-- **Full API coverage** -- All 66 Green Invoice API endpoints across 10 consolidated tools
+- **Full API coverage** -- All 66 Green Invoice API endpoints across 11 consolidated tools
 - **Documents** -- Create, search, update, close, reopen, send, preview invoices, receipts, quotes, and all document types
 - **Clients** -- Full client management (CRUD, search, merge, balance, document association)
 - **Suppliers** -- Supplier management for expense tracking (CRUD, search, merge)
@@ -134,7 +134,7 @@ If you cloned the repo locally:
 }
 ```
 
-## Available Tools (10 consolidated tools, 66 endpoints)
+## Available Tools (11 consolidated tools, 66 endpoints)
 
 Each tool uses an `action` parameter to select the operation, and a `data` JSON string for request parameters.
 
@@ -150,6 +150,7 @@ Each tool uses an `action` parameter to select the operation, and a `data` JSON 
 | `payment` | get_form, search_tokens, charge_token, create_link, get_link, get_link_status | Online payments and payment links |
 | `webhook` | create, get, delete | Webhook subscriptions |
 | `reference_data` | occupations, countries, cities, currencies | Reference/lookup data (no auth required) |
+| `partner` | list, get, connect, disconnect | Partner/representative connections (multi-tenant CPA) |
 
 ## Document Type Reference
 
