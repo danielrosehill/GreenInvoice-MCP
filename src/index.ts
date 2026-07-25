@@ -19,6 +19,12 @@ const API_ID = process.env.GREENINVOICE_API_ID;
 const API_SECRET = process.env.GREENINVOICE_API_SECRET;
 const SANDBOX = process.env.GREENINVOICE_SANDBOX === "true";
 
+// The sandbox is a fully separate environment with its own accounts: production
+// API keys are rejected there (401), so it needs its own key pair.
+// See docs/sandbox.md.
+const SANDBOX_API_ID = process.env.GREENINVOICE_SANDBOX_API_ID;
+const SANDBOX_API_SECRET = process.env.GREENINVOICE_SANDBOX_API_SECRET;
+
 if (!API_ID || !API_SECRET) {
   console.error(
     "Error: GREENINVOICE_API_ID and GREENINVOICE_API_SECRET environment variables are required.\n" +
@@ -29,14 +35,25 @@ if (!API_ID || !API_SECRET) {
 
 const server = new McpServer({
   name: "greeninvoice-mcp",
-  version: "0.1.0",
+  version: "0.3.0",
   description:
     "Unofficial MCP server for the Green Invoice API. Not affiliated with or endorsed by Green Invoice.",
 });
 
 const client = new GreenInvoiceClient(API_ID, API_SECRET, SANDBOX);
 
-registerTools(server, client);
+// Dedicated sandbox client for the `sandbox` tool, so test documents can be
+// created without the other ten tools leaving production. Null when no sandbox
+// credentials are configured — the tool then reports how to set them up.
+let sandboxClient: GreenInvoiceClient | null = null;
+if (SANDBOX_API_ID && SANDBOX_API_SECRET) {
+  sandboxClient = new GreenInvoiceClient(SANDBOX_API_ID, SANDBOX_API_SECRET, true);
+} else if (SANDBOX) {
+  // Whole server already points at the sandbox; reuse it.
+  sandboxClient = client;
+}
+
+registerTools(server, client, sandboxClient);
 
 async function main() {
   const transport = new StdioServerTransport();

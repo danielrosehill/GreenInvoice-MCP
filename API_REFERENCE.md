@@ -2,7 +2,7 @@
 
 > Source: [Apiary Blueprint](https://jsapi.apiary.io/apis/greeninvoice.json) | Last updated: 2026-03-11  
 > Production base: `https://api.greeninvoice.co.il/api/v1/`  
-> Sandbox base: `https://sandbox.d.greeninvoice.co.il/api/v1/`  
+> Sandbox base: `https://sandbox.d.greeninvoice.co.il/api/v1/` — mirrors every path below, but is a **separate tenancy: production keys get `401` there**. See [docs/sandbox.md](docs/sandbox.md).  
 > Reference data base: `https://cache.greeninvoice.co.il/`
 
 ## Endpoints (66 total)

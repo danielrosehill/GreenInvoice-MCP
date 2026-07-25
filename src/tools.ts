@@ -11,7 +11,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { GreenInvoiceClient } from "./client.js";
+import { GreenInvoiceClient, SANDBOX_BASE } from "./client.js";
 
 // ── Shared helpers ─────────────────────────────────────────────────────
 
@@ -38,9 +38,85 @@ const PAYMENT_TYPES = `Payment type codes: -1=Unpaid, 0=Deduction at Source, 1=C
 
 const CURRENCIES = `Currencies: ILS, USD, EUR, GBP, JPY, CHF, CNY, AUD, CAD, and more (28 supported)`;
 
+// ── Sandbox test-data helpers ─────────────────────────────────────────
+
+/** Document types the API rejects without a payment array. */
+const PAYMENT_REQUIRED_TYPES = new Set([320, 400, 405]);
+
+const TEST_REMARKS =
+  "TEST DATA — created in the Green Invoice sandbox by greeninvoice-mcp. Not a real financial document.";
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Expand a minimal spec into a complete, valid document payload.
+ *
+ * Everything has a default so `create_test_document` works with no arguments at
+ * all; every default can be overridden. Callers wanting full control over the
+ * body should use the `create_document` action instead.
+ */
+export function buildTestDocument(data: Record<string, unknown> = {}): Record<string, unknown> {
+  const type = Number(data.type ?? 305);
+  const price = Number(data.price ?? 100);
+  const quantity = Number(data.quantity ?? 1);
+  const currency = (data.currency as string) ?? "ILS";
+  const date = (data.date as string) ?? today();
+
+  const doc: Record<string, unknown> = {
+    type,
+    date,
+    lang: (data.lang as string) ?? "en",
+    currency,
+    description: (data.description as string) ?? `TEST document (type ${type})`,
+    remarks: (data.remarks as string) ?? TEST_REMARKS,
+    client: {
+      name: (data.clientName as string) ?? "MCP Sandbox Test Client",
+      add: data.addClient === false ? false : true,
+      ...(data.clientEmails ? { emails: data.clientEmails } : {}),
+      ...(data.clientTaxId ? { taxId: data.clientTaxId } : {}),
+    },
+    income: [
+      {
+        description: (data.itemDescription as string) ?? "Test line item",
+        quantity,
+        price,
+        currency,
+        vatType: Number(data.vatType ?? 0),
+      },
+    ],
+  };
+
+  if (data.dueDate) doc.dueDate = data.dueDate;
+
+  if (PAYMENT_REQUIRED_TYPES.has(type)) {
+    // Defaults to the line subtotal. With vatType 0 the document total includes
+    // VAT on top, so this leaves the document partially paid rather than closed
+    // — pass paymentAmount explicitly to settle it in full.
+    doc.payment = [
+      {
+        date,
+        type: Number(data.paymentType ?? 4),
+        price: Number(data.paymentAmount ?? price * quantity),
+        currency,
+      },
+    ];
+  }
+
+  return doc;
+}
+
+/** Document types the `seed` action creates, one of each. */
+export const SEED_TYPES = [10, 300, 305, 320, 400];
+
 // ════════════════════════════════════════════════════════════════════════
 
-export function registerTools(server: McpServer, client: GreenInvoiceClient) {
+export function registerTools(
+  server: McpServer,
+  client: GreenInvoiceClient,
+  sandboxClient: GreenInvoiceClient | null = null
+) {
 
   // ── 1. ACCOUNT ───────────────────────────────────────────────────────
 
@@ -507,6 +583,149 @@ Actions:
       const res = await fetch(url);
       if (!res.ok) throw new Error(`Reference data error (${res.status}): ${await res.text()}`);
       return json(await res.json());
+    }
+  );
+
+  // ── 11. SANDBOX ──────────────────────────────────────────────────────
+
+  server.tool(
+    "sandbox",
+    `Create and inspect TEST documents in the Green Invoice sandbox (${SANDBOX_BASE}). Use this instead of the 'document' tool whenever the goal is to try something out, demo a flow, or validate a payload shape — nothing here touches the real books.
+
+This tool is hard-bound to the sandbox base URL and cannot reach production, no matter what is passed to it. The other ten tools remain on whichever environment the server was started against.
+
+Requires its OWN credentials: the sandbox is a separate environment with separate accounts, and production API keys are rejected there with 401. Set GREENINVOICE_SANDBOX_API_ID and GREENINVOICE_SANDBOX_API_SECRET from a sandbox account created at https://app.sandbox.d.greeninvoice.co.il/. Run action "status" first to check.
+
+${DOC_TYPES}. ${PAYMENT_TYPES}. ${CURRENCIES}.
+
+Actions:
+"status" = report whether sandbox credentials are configured, and if so verify them against the sandbox (GET /account/me + /businesses/me). Safe, read-only, no arguments.
+"create_test_document" = create a document from a minimal spec, filling in every required field. All arguments optional (data: {type (default 305), price (default 100), quantity (default 1), currency (default ILS), lang (default en), date (default today), dueDate, description, remarks, itemDescription, vatType, clientName (default "MCP Sandbox Test Client"), clientEmails:[], clientTaxId, addClient (default true — auto-creates the client), paymentType (default 4=Bank Transfer), paymentAmount}). Types 320/400/405 get a payment array automatically; its default is the line subtotal, which with vatType 0 leaves the document partially paid — pass paymentAmount to settle in full.
+"seed" = create one test document of each of types ${SEED_TYPES.join(", ")} in a single call, for populating an empty sandbox (data: {price, currency, clientName} — all optional, applied to every document). Returns a per-type result list including any failures.
+"create_document" = create a document from a full explicit payload, same shape as the 'document' tool's create action (data: {type, client:{...}, income:[...], payment:[...], ...}). No defaults are filled in.
+"preview_document" = render a payload as a base64 PDF WITHOUT creating anything (data: same shape as create_document). The cheapest way to check a payload is well-formed.
+"get_document" = get a sandbox document by ID (data: {"id":"..."})
+"search_documents" = search sandbox documents (data: {page, pageSize, type:[], status:[], fromDate, toDate, sort})
+"download_links" = get PDF download links for a sandbox document (data: {"id":"..."})
+"create_test_client" = create a test client (data: {name, emails:[], taxId, phone, address, city, ...} — all optional, name defaults to a timestamped test name)
+"search_clients" = search sandbox clients (data: {page, pageSize, name, email, active})
+"request" = escape hatch for any other sandbox endpoint (data: {"method":"POST","path":"/items/search","body":{...}}). Reaches all 66 endpoints without duplicating the whole tool surface.
+
+Note: there is deliberately no "send" action — sandbox document emails would still be delivered to real inboxes. Use "download_links" or "preview_document" to inspect output instead.`,
+    {
+      action: z.enum(["status", "create_test_document", "seed", "create_document", "preview_document", "get_document", "search_documents", "download_links", "create_test_client", "search_clients", "request"])
+        .describe("Action to perform"),
+      data: z.string().optional().describe("JSON string of request parameters (see action descriptions)"),
+    },
+    async ({ action, data: raw }) => {
+      const data = parseData(raw) as Record<string, unknown> | undefined;
+
+      if (!sandboxClient) {
+        const message =
+          "Sandbox is not configured. The Green Invoice sandbox is a separate environment " +
+          "with its own accounts — production API keys are rejected there with HTTP 401 " +
+          "(verified 2026-07-25). To enable this tool:\n" +
+          "  1. Create a sandbox account at https://app.sandbox.d.greeninvoice.co.il/\n" +
+          "  2. In that account, generate an API key (My Account > Developer Tools > API Keys)\n" +
+          "  3. Set GREENINVOICE_SANDBOX_API_ID and GREENINVOICE_SANDBOX_API_SECRET on this MCP server\n" +
+          "Alternatively, set GREENINVOICE_SANDBOX=true to point the entire server (all tools) " +
+          "at the sandbox using GREENINVOICE_API_ID/SECRET.";
+        if (action === "status") {
+          return json({ configured: false, baseUrl: SANDBOX_BASE, message });
+        }
+        throw new Error(message);
+      }
+
+      const sb = sandboxClient;
+      const id = data?.id as string | undefined;
+
+      switch (action) {
+        case "status": {
+          const result: Record<string, unknown> = {
+            configured: true,
+            baseUrl: sb.base,
+            sharedWithMainClient: sb === client,
+          };
+          try {
+            result.account = await sb.get("/account/me");
+            result.business = await sb.get("/businesses/me");
+            result.reachable = true;
+          } catch (err) {
+            result.reachable = false;
+            result.error = err instanceof Error ? err.message : String(err);
+          }
+          return json(result);
+        }
+
+        case "create_test_document": {
+          const body = buildTestDocument(data ?? {});
+          return json({ sent: body, response: await sb.post("/documents", body) });
+        }
+
+        case "seed": {
+          const results: Array<Record<string, unknown>> = [];
+          for (const type of SEED_TYPES) {
+            const body = buildTestDocument({ ...data, type });
+            try {
+              results.push({ type, ok: true, response: await sb.post("/documents", body) });
+            } catch (err) {
+              results.push({
+                type,
+                ok: false,
+                error: err instanceof Error ? err.message : String(err),
+                sent: body,
+              });
+            }
+          }
+          return json({ baseUrl: sb.base, created: results.filter((r) => r.ok).length, results });
+        }
+
+        case "create_document": {
+          const body = { ...data };
+          delete body.id;
+          return json(await sb.post("/documents", body));
+        }
+
+        case "preview_document": {
+          const body = { ...data };
+          delete body.id;
+          return json(await sb.post("/documents/preview", body));
+        }
+
+        case "get_document":
+          return json(await sb.get(`/documents/${id}`));
+
+        case "search_documents":
+          return json(await sb.post("/documents/search", data ?? {}));
+
+        case "download_links":
+          return json(await sb.get(`/documents/${id}/download/links`));
+
+        case "create_test_client": {
+          const body = {
+            name: `MCP Sandbox Test Client ${today()}`,
+            active: true,
+            remarks: TEST_REMARKS,
+            ...data,
+          };
+          delete (body as Record<string, unknown>).id;
+          return json(await sb.post("/clients", body));
+        }
+
+        case "search_clients":
+          return json(await sb.post("/clients/search", data ?? {}));
+
+        case "request": {
+          const method = String(data?.method ?? "GET").toUpperCase();
+          const path = data?.path as string | undefined;
+          if (!path) throw new Error("'path' is required for the request action, e.g. \"/items/search\"");
+          if (!path.startsWith("/")) throw new Error(`'path' must start with '/': ${path}`);
+          return json(await sb.request(method, path, data?.body));
+        }
+
+        default:
+          throw new Error(`Unknown action: ${action}`);
+      }
     }
   );
 }

@@ -16,9 +16,9 @@ An MCP (Model Context Protocol) server that provides AI assistants with access t
 - **Webhooks** -- Manage webhook subscriptions
 - **Account & Business** -- Account info, settings, business config, numbering, file uploads
 - **Reference Data** -- Business categories, countries, cities, exchange rates
+- **Sandbox** -- Create test documents in Green Invoice's test environment without touching the real books
 - Automatic JWT token management with caching and refresh
 - Built-in rate limiting (~3 req/s to match API limits)
-- Sandbox mode support for testing
 
 ## Prerequisites
 
@@ -53,7 +53,9 @@ The server requires these environment variables:
 |----------|----------|-------------|
 | `GREENINVOICE_API_ID` | Yes | Your Green Invoice API key ID |
 | `GREENINVOICE_API_SECRET` | Yes | Your Green Invoice API key secret |
-| `GREENINVOICE_SANDBOX` | No | Set to `true` to use the sandbox environment |
+| `GREENINVOICE_SANDBOX_API_ID` | No | Sandbox API key ID -- enables the `sandbox` tool |
+| `GREENINVOICE_SANDBOX_API_SECRET` | No | Sandbox API key secret |
+| `GREENINVOICE_SANDBOX` | No | Set to `true` to point **every** tool at the sandbox |
 
 ## MCP Client Configuration
 
@@ -76,7 +78,7 @@ To add this server to any MCP-compatible client:
 }
 ```
 
-For sandbox/testing, add `"GREENINVOICE_SANDBOX": "true"` to the `env` object.
+To enable the `sandbox` tool for testing, add `GREENINVOICE_SANDBOX_API_ID` and `GREENINVOICE_SANDBOX_API_SECRET` to the `env` object -- see [Sandbox / test documents](#sandbox--test-documents).
 
 ## Usage with Claude Code
 
@@ -97,7 +99,7 @@ Add to your Claude Code MCP settings (`~/.claude/settings.json` or project `.cla
 }
 ```
 
-For sandbox/testing:
+With the sandbox enabled alongside production:
 
 ```json
 {
@@ -108,7 +110,8 @@ For sandbox/testing:
       "env": {
         "GREENINVOICE_API_ID": "your-api-id-here",
         "GREENINVOICE_API_SECRET": "your-api-secret-here",
-        "GREENINVOICE_SANDBOX": "true"
+        "GREENINVOICE_SANDBOX_API_ID": "your-sandbox-api-id-here",
+        "GREENINVOICE_SANDBOX_API_SECRET": "your-sandbox-api-secret-here"
       }
     }
   }
@@ -134,7 +137,7 @@ If you cloned the repo locally:
 }
 ```
 
-## Available Tools (10 consolidated tools, 66 endpoints)
+## Available Tools (11 consolidated tools, 66 endpoints)
 
 Each tool uses an `action` parameter to select the operation, and a `data` JSON string for request parameters.
 
@@ -150,6 +153,43 @@ Each tool uses an `action` parameter to select the operation, and a `data` JSON 
 | `payment` | get_form, search_tokens, charge_token, create_link, get_link, get_link_status | Online payments and payment links |
 | `webhook` | create, get, delete | Webhook subscriptions |
 | `reference_data` | occupations, countries, cities, currencies | Reference/lookup data (no auth required) |
+| `sandbox` | status, create_test_document, seed, create_document, preview_document, get_document, search_documents, download_links, create_test_client, search_clients, request | Test documents in the sandbox environment |
+
+## Sandbox / test documents
+
+The `sandbox` tool creates throwaway documents in Green Invoice's test
+environment (`https://sandbox.d.greeninvoice.co.il/api/v1/`), so you can try a
+flow or validate a payload without issuing a real, legally binding document.
+
+**The sandbox needs its own credentials.** It is a separate environment with
+separate accounts -- production API keys are rejected there with `401`, and the
+error is byte-identical to the one you get from a completely bogus key, so it
+looks like a bad key rather than a wrong environment. Register a sandbox account
+at `https://app.sandbox.d.greeninvoice.co.il/`, generate an API key inside it,
+and set `GREENINVOICE_SANDBOX_API_ID` / `GREENINVOICE_SANDBOX_API_SECRET`.
+
+Once configured, the `sandbox` tool's client is bound to the sandbox base URL at
+construction and has no code path to production -- it cannot write to the real
+books whatever arguments it is given. The other ten tools stay on production.
+
+Start with `sandbox status`, which reports whether credentials are configured
+and verifies them without throwing. Then:
+
+- `create_test_document` -- every argument is optional; defaults to a 100 ILS
+  type-305 Tax Invoice for an auto-created test client, dated today
+- `seed` -- one document of each of types 10, 300, 305, 320, 400, for filling an
+  empty sandbox
+- `preview_document` -- renders a payload to a base64 PDF without creating
+  anything; the cheapest way to check a payload is well-formed
+- `request` -- `{method, path, body}` escape hatch to any of the 66 endpoints
+
+There is no `send` action: sandbox documents are fake but email delivery is not.
+
+Setting `GREENINVOICE_SANDBOX=true` instead points *every* tool at the sandbox,
+for a dedicated test deployment.
+
+Full details, including what has and has not been verified against the live
+sandbox: **[docs/sandbox.md](docs/sandbox.md)**.
 
 ## Document Type Reference
 
@@ -189,6 +229,7 @@ See [API_REFERENCE.md](API_REFERENCE.md) for the complete endpoint reference (66
 
 ## MCP Validation Notes
 
+- **25/07/2026**: Added the `sandbox` tool (11th tool) for creating test documents. Probed the sandbox environment directly: base URL and all 66 paths are live, and `GET /documents/types` answers `200` unauthenticated, but a **valid production key pair is rejected with `401`** — identical response to a bogus key — confirming the sandbox is a separate tenancy needing its own account and keys. Sandbox web app is at `https://app.sandbox.d.greeninvoice.co.il/` (302 from the sandbox root). Payload generation is covered offline by `scripts/check-test-payloads.mjs`; end-to-end document creation is **untested** pending sandbox credentials. See [docs/sandbox.md](docs/sandbox.md).
 - **03/04/2026**: Consolidated from 29 individual tools to 10 resource-based tools. Added full API coverage (66 endpoints) including suppliers, expenses, payments, partners reference data, and previously missing document/business/client endpoints. API spec sourced from Apiary blueprint (updated 2026-03-11).
 - **01/04/2026**: Validated against the [Green Invoice API docs](https://www.greeninvoice.co.il/api-docs/). Basic business document functions tested: create invoice/receipt, issue. All tools worked as expected.
   - Removed `delete_document` tool -- not supported by the API (no `DELETE /documents/{id}` endpoint exists).

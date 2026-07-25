@@ -5,8 +5,8 @@
  * Not affiliated with or endorsed by Green Invoice.
  */
 
-const PRODUCTION_BASE = "https://api.greeninvoice.co.il/api/v1";
-const SANDBOX_BASE = "https://sandbox.d.greeninvoice.co.il/api/v1";
+export const PRODUCTION_BASE = "https://api.greeninvoice.co.il/api/v1";
+export const SANDBOX_BASE = "https://sandbox.d.greeninvoice.co.il/api/v1";
 
 const TOKEN_TTL_MS = 25 * 60 * 1000; // 25 minutes (tokens last ~30 min)
 const MIN_REQUEST_INTERVAL_MS = 350; // ~3 req/s rate limit
@@ -23,10 +23,22 @@ export class GreenInvoiceClient {
   private tokenCache: TokenCache | null = null;
   private lastRequestTime = 0;
 
+  readonly sandbox: boolean;
+
   constructor(apiId: string, apiSecret: string, sandbox = false) {
     this.apiId = apiId;
     this.apiSecret = apiSecret;
+    this.sandbox = sandbox;
     this.baseUrl = sandbox ? SANDBOX_BASE : PRODUCTION_BASE;
+  }
+
+  /** Which environment this client is bound to. Fixed at construction. */
+  get environment(): "sandbox" | "production" {
+    return this.sandbox ? "sandbox" : "production";
+  }
+
+  get base(): string {
+    return this.baseUrl;
   }
 
   private async rateLimit(): Promise<void> {
