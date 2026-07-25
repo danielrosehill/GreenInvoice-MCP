@@ -35,7 +35,7 @@ if (!API_ID || !API_SECRET) {
 
 const server = new McpServer({
   name: "greeninvoice-mcp",
-  version: "0.3.0",
+  version: "0.3.1",
   description:
     "Unofficial MCP server for the Green Invoice API. Not affiliated with or endorsed by Green Invoice.",
 });

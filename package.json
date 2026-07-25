@@ -1,6 +1,6 @@
 {
   "name": "greeninvoice-mcp",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Unofficial MCP (Model Context Protocol) server for the Green Invoice API. Not affiliated with or endorsed by Green Invoice.",
   "keywords": [
     "mcp",

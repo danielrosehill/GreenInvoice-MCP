@@ -46,10 +46,20 @@ account. To use it you need a **sandbox account of its own**, registered at
 `https://app.sandbox.d.greeninvoice.co.il/`, and an API key generated from
 inside that account (My Account > Developer Tools > API Keys > Add Key).
 
-Not yet confirmed (as of 2026-07-25): whether sandbox registration is
-self-service or has to be requested from Green Invoice support, and whether
-sandbox data is periodically wiped. If support has to be involved, the
-`contact-support` skill in `.claude/skills/` drafts the request.
+There appears to be **no self-service route** to a sandbox account — none was
+findable from the production account UI or the API docs.
+
+**Status: blocked on Morning support.** A request was emailed to
+`support@morning.co` on 2026-07-25 from `daniel@dsrholdings.cloud` (Gmail message
+ID `19f99c9bd2edd2dd`) asking them to enable sandbox API access for that address,
+quoting business ID `7c75acf3-4441-4eab-a7ff-1ed288fc6db9`. It also asks whether
+registration is meant to be self-service and whether sandbox data is periodically
+wiped — both still unknown. Until they reply, the `sandbox` tool ships but cannot
+create anything.
+
+Note the account-email split: the business record's registered email is
+`accounts@dsrholdings.cloud`, while the address sandbox access was requested for
+is `daniel@dsrholdings.cloud`. The ticket states both so support can link them.
 
 ## Configuring this server
 
@@ -107,6 +117,22 @@ One action-based tool, matching the convention of the other ten.
 There is deliberately **no `send` action**. Sandbox documents are fake but the
 email delivery is not — a `POST /documents/{id}/send` in the sandbox would put
 mail in a real inbox. Use `download_links` or `preview_document` instead.
+
+### Don't use `/account/me` as a liveness probe
+
+`GET /account/me` returns **403 `גישה אסורה`** for API-key auth on the DSR
+Holdings production account (verified 2026-07-25). The `account` tool is
+therefore non-functional there, and it is not a credential problem — the same key
+works fine everywhere else.
+
+`sandbox status` originally probed that endpoint, which meant a correctly
+configured sandbox would have reported `reachable: false` and sent you chasing a
+credential fault that did not exist. It now probes **`/businesses/me`** — the
+endpoint an API key is always scoped for — and calls `/account/me` best-effort,
+reporting any failure as an `accountNote` rather than a fatal error.
+
+Worth remembering generally: `/businesses/me` is the reliable "are these
+credentials good" check for this API.
 
 ### Defaults that `create_test_document` fills in
 

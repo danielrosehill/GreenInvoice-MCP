@@ -646,13 +646,24 @@ Note: there is deliberately no "send" action — sandbox document emails would s
             baseUrl: sb.base,
             sharedWithMainClient: sb === client,
           };
+          // /businesses/me is the liveness probe: it is the endpoint an API key
+          // is always scoped for.
           try {
-            result.account = await sb.get("/account/me");
             result.business = await sb.get("/businesses/me");
             result.reachable = true;
           } catch (err) {
             result.reachable = false;
             result.error = err instanceof Error ? err.message : String(err);
+          }
+          // /account/me is best-effort only — it answers 403 for API-key auth on
+          // at least some plans (verified against production 2026-07-25), so a
+          // failure here says nothing about whether credentials are good.
+          try {
+            result.account = await sb.get("/account/me");
+          } catch (err) {
+            result.accountNote = `GET /account/me unavailable (${
+              err instanceof Error ? err.message : String(err)
+            }) — not a credential problem; this endpoint is commonly forbidden for API keys.`;
           }
           return json(result);
         }
