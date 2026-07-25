@@ -509,4 +509,36 @@ Actions:
       return json(await res.json());
     }
   );
+
+  // ── 11. PARTNER ──────────────────────────────────────────────────────
+
+  server.tool(
+    "partner",
+    `Manage partner/representative connections (for CPAs/bookkeepers managing multiple client accounts).
+Actions:
+"list" = list all connected client users (GET /partners/users)
+"connect" = request connection approval from a user (data: {"email":"client@example.com"}) (POST /partners/users/connection)
+"find" = get a connected user by email (data: {"email":"client@example.com"}) (GET /partners/users?email=)
+"disconnect" = disconnect a partner user by email (data: {"email":"client@example.com"}) (DELETE /partners/users/connection?email=)`,
+    {
+      action: z.enum(["list", "connect", "find", "disconnect"]).describe("Action to perform"),
+      data: z.string().optional().describe("JSON string of request parameters"),
+    },
+    async ({ action, data: raw }) => {
+      const data = parseData(raw) as Record<string, unknown> | undefined;
+      const email = typeof data?.email === "string" ? data.email.trim() : "";
+      switch (action) {
+        case "list":
+          return json(await client.get("/partners/users"));
+        case "connect":
+          return json(await client.post("/partners/users/connection", { email }));
+        case "find":
+          return json(await client.get(`/partners/users?email=${encodeURIComponent(email)}`));
+        case "disconnect":
+          return json(await client.delete(`/partners/users/connection?email=${encodeURIComponent(email)}`));
+        default:
+          throw new Error(`Unknown action: ${action}`);
+      }
+    }
+  );
 }
