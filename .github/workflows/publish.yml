@@ -18,12 +18,11 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-          # No registry-url: with it, setup-node writes an .npmrc that reads NODE_AUTH_TOKEN,
-          # which defaults to a placeholder; npm then sends that instead of doing the OIDC
-          # exchange and the registry answers E404 (seen 2026-10-21).
+          registry-url: https://registry.npmjs.org
       - run: npm install -g npm@latest   # trusted publishing needs npm >= 11.5.1
       - name: Tag matches package.json version
         run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
       - run: npm ci
       - run: npm run build
-      - run: npm publish
+      - run: npm --version
+      - run: npm publish --loglevel=verbose
