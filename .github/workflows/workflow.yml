@@ -1,6 +1,6 @@
 # Publishes to npm on a version tag using npm trusted publishing (OIDC): no npm token is
 # stored anywhere. One-time setup on npmjs.com, package settings -> Trusted publisher ->
-# GitHub Actions: owner danielrosehill, repo GreenInvoice-MCP, workflow publish.yml.
+# GitHub Actions: owner danielrosehill, repo GreenInvoice-MCP, workflow workflow.yml (npm will not edit the filename once set).
 # Background: bypass-2FA granular tokens lose direct publishing around January 2027
 # (GitHub changelog 2026-07-08).
 name: publish
@@ -25,4 +25,4 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm --version
-      - run: npm publish --loglevel=verbose
+      - run: npm publish 
