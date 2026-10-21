@@ -430,9 +430,10 @@ Actions:
 "close" = close/report expense (data: {"id":"..."})
 "get_statuses" = list expense statuses
 "get_classifications" = get accounting classifications map
-"search_drafts" = search expense drafts (data: {page, pageSize, fromDate, toDate, description, supplierId, supplierName})`,
+"search_drafts" = search expense drafts (data: {page, pageSize, fromDate, toDate, description, supplierId, supplierName})
+"upload_file" = upload a bill/receipt (PDF, PNG, JPG, GIF, SVG; max 16 MB) (data: {filename, contentType?, file?:"<base64>", url?:"https://... to fetch the file from", expenseId?}). Without expenseId Green Invoice OCRs the file and creates an expense DRAFT asynchronously (5-60 s; find it with search_drafts; a human approves it in the app). With expenseId the file is attached to that expense (poll get until data.fileKey is set). Give exactly one of file/url. Reported expenses (status 20) can't get files.`,
     {
-      action: z.enum(["search", "get", "create", "update", "delete", "open", "close", "get_statuses", "get_classifications", "search_drafts"])
+      action: z.enum(["search", "get", "create", "update", "delete", "open", "close", "get_statuses", "get_classifications", "search_drafts", "upload_file"])
         .describe("Action to perform"),
       data: z.string().optional().describe("JSON string of request parameters"),
     },
@@ -466,6 +467,41 @@ Actions:
           return json(await client.get("/accounting/classifications/map"));
         case "search_drafts":
           return json(await client.post("/expenses/drafts/search", data));
+        case "upload_file": {
+          const d = (data ?? {}) as Record<string, unknown>;
+          const name = String(d.filename ?? "").trim();
+          if (!name) throw new Error("upload_file needs data.filename");
+          if (Boolean(d.file) === Boolean(d.url)) throw new Error("upload_file needs exactly one of data.file (base64) or data.url");
+          let bytes: Uint8Array;
+          let type = (d.contentType as string) || "";
+          if (d.url) {
+            const r = await fetch(String(d.url));
+            if (!r.ok) throw new Error(`Fetching data.url failed (${r.status})`);
+            bytes = new Uint8Array(await r.arrayBuffer());
+            type = type || r.headers.get("content-type") || "";
+          } else {
+            bytes = Uint8Array.from(Buffer.from(String(d.file), "base64"));
+          }
+          if (!type) {
+            const ext = name.toLowerCase().split(".").pop();
+            type = ({ pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", svg: "image/svg+xml" } as Record<string, string>)[ext ?? ""] || "application/octet-stream";
+          }
+          // Unique name per upload: S3 keys dedupe on identical names.
+          const dot = name.lastIndexOf(".");
+          const unique = dot > 0
+            ? `${name.slice(0, dot)}_${Date.now().toString(36)}${name.slice(dot)}`
+            : `${name}_${Date.now().toString(36)}`;
+          const res = await client.uploadExpenseFile({
+            bytes, filename: unique, contentType: type, expenseId: d.expenseId as string | undefined,
+          });
+          return json({
+            ...res,
+            bytes: bytes.byteLength,
+            next: d.expenseId
+              ? "Poll expense get until data.fileKey is set (5-15 s)."
+              : "OCR runs asynchronously; poll search_drafts (newest first) for the new draft. Approve it in Green Invoice.",
+          });
+        }
         default:
           throw new Error(`Unknown action: ${action}`);
       }

@@ -9,6 +9,10 @@ export const PRODUCTION_BASE = "https://api.greeninvoice.co.il/api/v1";
 export const SANDBOX_BASE = "https://sandbox.d.greeninvoice.co.il/api/v1";
 export const OAUTH_PRODUCTION = "https://api.morning.co/idp/v1/oauth/token";
 export const OAUTH_SANDBOX = "https://api.sandbox.morning.dev/idp/v1/oauth/token";
+// File uploads go through a separate API-gateway service that hands out presigned S3 POSTs.
+// Verified 2026-10-21 with an OAuth token: GET .../url?context=expense&data={"source":5}
+// returns {url, fields{15}, maxFileSize}. Sandbox equivalent unknown.
+export const FILE_UPLOAD_URL = "https://apigw.greeninvoice.co.il/file-upload/v1/url";
 
 const TOKEN_TTL_MS = 25 * 60 * 1000; // 25 minutes (OAuth tokens last 60 min, legacy ~30)
 const MIN_REQUEST_INTERVAL_MS = 350; // ~3 req/s rate limit
@@ -107,6 +111,60 @@ export class GreenInvoiceClient {
 
   private invalidateToken(): void {
     this.tokenCache = null;
+  }
+
+  /**
+   * Upload a document for an expense. Without expenseId, Green Invoice runs OCR and creates
+   * an expense *draft* asynchronously (find it with expenses/drafts/search); with expenseId the
+   * file is attached to that expense (poll it until data.fileKey appears). source:5 = API upload.
+   */
+  async uploadExpenseFile(opts: {
+    bytes: Uint8Array;
+    filename: string;
+    contentType: string;
+    expenseId?: string;
+  }): Promise<{ uploaded: true; status: number; key?: string; mode: string }> {
+    if (this.sandbox) {
+      throw new Error("Expense file upload is not available for the sandbox client (endpoint unknown)");
+    }
+    await this.rateLimit();
+    const token = await this.getToken();
+    const meta = opts.expenseId
+      ? { source: 5, id: opts.expenseId, state: "expense" }
+      : { source: 5 };
+    const q = new URLSearchParams({ context: "expense", data: JSON.stringify(meta) });
+    const pre = await fetch(`${FILE_UPLOAD_URL}?${q}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!pre.ok) {
+      throw new Error(`Upload URL request failed (${pre.status}): ${await pre.text()}`);
+    }
+    const presigned = (await pre.json()) as {
+      url: string;
+      fields: Record<string, string>;
+      maxFileSize?: number;
+    };
+    if (presigned.maxFileSize && opts.bytes.byteLength > presigned.maxFileSize) {
+      throw new Error(`File is ${opts.bytes.byteLength} bytes; limit is ${presigned.maxFileSize}`);
+    }
+    // S3 POST policy: every presigned field first, the file last.
+    const form = new FormData();
+    for (const [k, v] of Object.entries(presigned.fields)) form.append(k, v);
+    form.append(
+      "file",
+      new Blob([opts.bytes.slice().buffer as ArrayBuffer], { type: opts.contentType }),
+      opts.filename
+    );
+    const up = await fetch(presigned.url, { method: "POST", body: form });
+    if (!(up.status === 204 || up.status === 201 || up.status === 200)) {
+      throw new Error(`S3 upload failed (${up.status}): ${await up.text()}`);
+    }
+    return {
+      uploaded: true,
+      status: up.status,
+      key: presigned.fields.key,
+      mode: opts.expenseId ? "attach-to-expense" : "new-draft",
+    };
   }
 
   async request(
