@@ -1,6 +1,6 @@
 {
   "name": "greeninvoice-mcp",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Unofficial MCP (Model Context Protocol) server for the Green Invoice API. Not affiliated with or endorsed by Green Invoice.",
   "keywords": [
     "mcp",
@@ -35,7 +35,8 @@
     "check": "npm run build && node scripts/check-test-payloads.mjs",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "prepare": "tsc"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1"

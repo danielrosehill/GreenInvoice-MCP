@@ -7,8 +7,10 @@
 
 export const PRODUCTION_BASE = "https://api.greeninvoice.co.il/api/v1";
 export const SANDBOX_BASE = "https://sandbox.d.greeninvoice.co.il/api/v1";
+export const OAUTH_PRODUCTION = "https://api.morning.co/idp/v1/oauth/token";
+export const OAUTH_SANDBOX = "https://api.sandbox.morning.dev/idp/v1/oauth/token";
 
-const TOKEN_TTL_MS = 25 * 60 * 1000; // 25 minutes (tokens last ~30 min)
+const TOKEN_TTL_MS = 25 * 60 * 1000; // 25 minutes (OAuth tokens last 60 min, legacy ~30)
 const MIN_REQUEST_INTERVAL_MS = 350; // ~3 req/s rate limit
 
 interface TokenCache {
@@ -60,19 +62,40 @@ export class GreenInvoiceClient {
 
     await this.rateLimit();
 
-    const res = await fetch(`${this.baseUrl}/account/token`, {
+    // Since ~Oct 2026 Green Invoice (morning) issues tokens through an OAuth 2.0
+    // client-credentials endpoint on api.morning.co; the old POST /account/token now
+    // returns 404 for every caller (verified 2026-10-21 with real and fake keys).
+    // Existing API key id/secret work unchanged as client_id/client_secret, and API
+    // calls stay on api.greeninvoice.co.il. Fall back to the legacy route for
+    // environments that still serve it (morning-cli does the same in "auto" mode).
+    let token: string | null = null;
+    const oauth = await fetch(this.sandbox ? OAUTH_SANDBOX : OAUTH_PRODUCTION, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: this.apiId, secret: this.apiSecret }),
+      body: JSON.stringify({
+        grant_type: "client_credentials",
+        client_id: this.apiId,
+        client_secret: this.apiSecret,
+      }),
     });
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Auth failed (${res.status}): ${text}`);
+    if (oauth.ok) {
+      const data = await oauth.json();
+      token = data.accessToken || data.access_token || null;
     }
 
-    const data = await res.json();
-    const token = data.token || res.headers.get("X-Authorization-Bearer");
+    if (!token) {
+      const res = await fetch(`${this.baseUrl}/account/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: this.apiId, secret: this.apiSecret }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Auth failed (oauth ${oauth.status}, legacy ${res.status}): ${text}`);
+      }
+      const data = await res.json();
+      token = data.token || res.headers.get("X-Authorization-Bearer");
+    }
 
     if (!token) {
       throw new Error("No token in auth response");
