@@ -1,0 +1,27 @@
+# Publishes to npm on a version tag using npm trusted publishing (OIDC): no npm token is
+# stored anywhere. One-time setup on npmjs.com, package settings -> Trusted publisher ->
+# GitHub Actions: owner danielrosehill, repo GreenInvoice-MCP, workflow publish.yml.
+# Background: bypass-2FA granular tokens lose direct publishing around January 2027
+# (GitHub changelog 2026-07-08).
+name: publish
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+  id-token: write   # required for the OIDC exchange with npm
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@latest   # trusted publishing needs npm >= 11.5.1
+      - name: Tag matches package.json version
+        run: test "v$(node -p 'require(\"./package.json\").version')" = "$GITHUB_REF_NAME"
+      - run: npm ci
+      - run: npm run build
+      - run: npm publish
