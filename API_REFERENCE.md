@@ -100,7 +100,7 @@
 | POST | /payments/tokens/search | Search credit card tokens |
 | POST | /payments/tokens/{id}/charge | Charge credit card token |
 
-### Partners (4)
+### Partners (4, not exposed by this MCP: partner Basic auth only, a normal API key gets 401)
 
 | Method | Path | Description |
 |--------|------|-------------|

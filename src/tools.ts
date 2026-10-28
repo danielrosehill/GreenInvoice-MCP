@@ -217,13 +217,14 @@ Actions:
 "preview" = preview as base64 PDF (data: same shape as create)
 "get_linked" = get linked documents (data: {"id":"..."})
 "get_info" = get document info for a type (data: {"type":305})
+"get_templates" = list document templates and their skins (GET /documents/templates); templateId/skinId on the business pick the look
 "get_types" = list document types (data: {"lang":"he"} optional)
 "get_statuses" = list document statuses (data: {"lang":"he"} optional)
 "search_payments" = search payments within documents (data: {page, pageSize, type:[], paymentTypes:[], fromDate, toDate, paymentId, sort})
 
 Emailing and payments (0.5.0): the API has no separate send or add-payment call (POST /documents/{id}/send and /documents/{id}/payment are 404, no such route, verified 2026-10-28). To email a document, put addresses in client.emails on "create" (the download link goes to them; emailContent and attachment control the mail). To record payment against an invoice, create a receipt (400) with payment rows and linkedDocumentIds:[invoiceId]. To share an existing document, use "download_links".`,
     {
-      action: z.enum(["search", "get", "create", "update", "close", "open", "download_links", "preview", "get_linked", "get_info", "get_types", "get_statuses", "search_payments"])
+      action: z.enum(["search", "get", "create", "update", "close", "open", "download_links", "preview", "get_linked", "get_info", "get_templates", "get_types", "get_statuses", "search_payments"])
         .describe("Action to perform"),
       data: z.string().optional().describe("JSON string of request parameters"),
     },
@@ -259,6 +260,8 @@ Emailing and payments (0.5.0): the API has no separate send or add-payment call 
           const type = data?.type;
           return json(await client.get(`/documents/info?type=${type}`));
         }
+        case "get_templates":
+          return json(await client.get("/documents/templates"));
         case "get_types": {
           const lang = data?.lang ? `?lang=${data.lang}` : "";
           return json(await client.get(`/documents/types${lang}`));
