@@ -137,6 +137,15 @@ If you cloned the repo locally:
 }
 ```
 
+## Companion plugin
+
+[greeninvoice-ops](https://github.com/danielrosehill/Claude-Green-Invoice-Ops-Plugin) is a Claude Code plugin built on this server: a skill with the safe workflows (resolve client, confirm, then create) and slash commands such as `/gi-create-invoice`, `/gi-log-expense` and `/gi-monthly-summary`. It holds no credentials and needs this server connected.
+
+```bash
+claude plugins marketplace add danielrosehill/Claude-Code-Plugins
+claude plugins install greeninvoice-ops@danielrosehill
+```
+
 ## Available Tools (11 consolidated tools, 66 endpoints)
 
 Each tool uses an `action` parameter to select the operation, and a `data` JSON string for request parameters.
