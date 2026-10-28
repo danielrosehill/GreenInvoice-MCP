@@ -49,17 +49,12 @@ inside that account (My Account > Developer Tools > API Keys > Add Key).
 There appears to be **no self-service route** to a sandbox account — none was
 findable from the production account UI or the API docs.
 
-**Status: blocked on Morning support.** A request was emailed to
-`support@morning.co` on 2026-07-25 from `daniel@dsrholdings.cloud` (Gmail message
-ID `19f99c9bd2edd2dd`) asking them to enable sandbox API access for that address,
-quoting business ID `7c75acf3-4441-4eab-a7ff-1ed288fc6db9`. It also asks whether
-registration is meant to be self-service and whether sandbox data is periodically
-wiped — both still unknown. Until they reply, the `sandbox` tool ships but cannot
-create anything.
-
-Note the account-email split: the business record's registered email is
-`accounts@dsrholdings.cloud`, while the address sandbox access was requested for
-is `daniel@dsrholdings.cloud`. The ticket states both so support can link them.
+**Status (2026-07-25): blocked on Morning support.** Sandbox API access was requested from
+`support@morning.co`; the request also asks whether registration is meant to be self-service and
+whether sandbox data is periodically wiped, both still unknown. Until access is granted the
+`sandbox` tool ships but cannot create anything. If you request access yourself, quote your
+business ID and both the account's registered email and the address you want access for, since
+they can differ.
 
 ## Configuring this server
 
@@ -120,8 +115,8 @@ mail in a real inbox. Use `download_links` or `preview_document` instead.
 
 ### Don't use `/account/me` as a liveness probe
 
-`GET /account/me` returns **403 `גישה אסורה`** for API-key auth on the DSR
-Holdings production account (verified 2026-07-25). The `account` tool is
+`GET /account/me` returns **403 `גישה אסורה`** for API-key auth on at least one
+production account (verified 2026-07-25). The `account` tool is
 therefore non-functional there, and it is not a credential problem — the same key
 works fine everywhere else.
 
@@ -162,11 +157,10 @@ we are not sending something known-broken.
 
 ## Deployment note
 
-The `greeninvoice` server on the MCPJungle gateway (residenceserver, 10.0.0.2)
-runs as **stdio via `npx -y greeninvoice-mcp`** — it consumes the published npm
-package, not this working tree. Local changes do not reach the gateway until the
-package is published and the server re-registered with `--force` (npx caches
-resolved versions).
+If you run this server as **stdio via `npx -y greeninvoice-mcp`** (for example behind an MCP
+gateway), it consumes the published npm package, not your working tree. Local changes do not
+reach it until the package is published and the server restarted; npx caches resolved versions,
+so pin the version (`greeninvoice-mcp@x.y.z`) and bump the pin.
 
 ## Token handling
 
