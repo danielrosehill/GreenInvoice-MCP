@@ -1,15 +1,17 @@
 /**
  * MCP tool definitions for the Green Invoice API.
- * Consolidated resource-based tools covering all 66 API endpoints.
+ * Consolidated resource-based tools over the Green Invoice / Morning REST API.
  *
  * DISCLAIMER: This is an unofficial, third-party integration.
  * Not affiliated with or endorsed by Green Invoice.
  *
- * API Reference: https://www.greeninvoice.co.il/api-docs/
- * Apiary spec last updated: 2026-03-11
+ * API Reference: https://developers.morning.co/api
+ * OpenAPI spec: https://developers.morning.co/docs/openapi.bundled.json
+ * (snapshot in spec/, checked against the live API 2026-10-28)
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { GreenInvoiceClient, SANDBOX_BASE } from "./client.js";
 
@@ -35,6 +37,22 @@ const DOC_TYPES = `Document type codes (per GET /documents/types): 10=Price Quot
 const DOC_STATUSES = `Document statuses: 0=Open, 1=Closed, 2=Manually Closed, 3=Canceling, 4=Canceled`;
 
 const PAYMENT_TYPES = `Payment type codes: -1=Unpaid, 0=Deduction at Source, 1=Cash, 2=Check, 3=Credit Card, 4=Bank Transfer, 5=PayPal, 10=Payment App, 11=Other`;
+
+const WEBHOOK_SETTINGS_URL = "https://app.greeninvoice.co.il/settings/developers/webhooks";
+
+// From the official spec's Webhooks section (2026-10-28).
+const WEBHOOK_EVENTS = [
+  { topic: "document/created", when: "A document is created." },
+  { topic: "client/created", when: "A client is created." },
+  { topic: "supplier/created", when: "A supplier is created." },
+  { topic: "payment/received", when: "A payment is received." },
+  { topic: "sale-pages/page-contacted", when: "A visitor submits their contact details on a sale page." },
+  { topic: "sale-pages/order-paid", when: "An order is paid on a sale page." },
+  { topic: "expense-draft/parsed", when: "An uploaded expense draft finishes parsing." },
+  { topic: "expense-draft/declined", when: "An uploaded expense draft is declined." },
+  { topic: "expense/file-updated", when: "An expense's file is updated." },
+  { topic: "file/infected", when: "An uploaded file is found to be infected and quarantined." },
+];
 
 const CURRENCIES = `Currencies: ILS, USD, EUR, GBP, JPY, CHF, CNY, AUD, CAD, and more (28 supported)`;
 
@@ -122,14 +140,13 @@ export function registerTools(
 
   server.tool(
     "account",
-    `Get account information.
-Actions: "get" = account info (GET /account/me), "settings" = account settings (GET /account/settings).`,
+    `Get account information (GET /account/me). Not in the official spec, and it answers 403 for API-key auth on the accounts tested (verified 2026-10-28); use business "get" for the business profile instead.
+Actions: "get" = account info. ("settings" was removed in 0.5.0: GET /account/settings is 404, no such route.)`,
     {
-      action: z.enum(["get", "settings"]).describe("Action to perform"),
+      action: z.enum(["get"]).describe("Action to perform"),
     },
-    async ({ action }) => {
-      const path = action === "settings" ? "/account/settings" : "/account/me";
-      return json(await client.get(path));
+    async () => {
+      return json(await client.get("/account/me"));
     }
   );
 
@@ -193,20 +210,20 @@ Actions:
 "search" = search documents (data: {page, pageSize, type:[], status:[], fromDate, toDate, sort, clientId, clientName, description, number, paymentTypes:[], download})
 "get" = get by ID (data: {"id":"..."})
 "create" = create document (works for ALL types above, incl. 100=Order and 500=Purchase Order). IMPORTANT field names: 'income' (not 'items'), 'payment' (not 'payments'), 'remarks' (not 'notes'), 'lang' (not 'language'), 'emails' (array). Types 320,400,405 REQUIRE payment array. Set client.add=true to auto-create client. For type 500 the 'client' object holds the SUPPLIER being ordered from (document recipient); manage supplier records themselves with the 'supplier' tool. Data: {type, client:{id,name,emails,taxId,address,city,zip,country,phone,add,self}, income:[{catalogNum,description,quantity,price,currency,vatType,itemId}], payment:[{date,type,price,currency,bankName,bankBranch,bankAccount,chequeNum}], currency,lang,description,remarks,footer,emailContent,signed,rounding,attachment,date,dueDate,discount:{amount,type},maxPayments,linkedDocumentIds,linkedPaymentId}
-"update" = update document (data: {"id":"...", ...fields})
+"update" = update document (data: {"id":"...", ...fields}). PUT /documents/{id} is not in the official spec and is unverified; issued tax documents generally cannot be changed (cancel with a credit note, 330).
 "close" = close document (data: {"id":"..."})
 "open" = reopen document (data: {"id":"..."})
-"send" = send via email (data: {"id":"...", "email":"optional-override"})
 "download_links" = get PDF download links (data: {"id":"..."})
-"add_payment" = add payment to document (data: {"id":"...", type, price, currency, date, bankName, bankBranch, bankAccount, chequeNum})
 "preview" = preview as base64 PDF (data: same shape as create)
 "get_linked" = get linked documents (data: {"id":"..."})
 "get_info" = get document info for a type (data: {"type":305})
 "get_types" = list document types (data: {"lang":"he"} optional)
 "get_statuses" = list document statuses (data: {"lang":"he"} optional)
-"search_payments" = search payments within documents (data: {page, pageSize, type:[], paymentTypes:[], fromDate, toDate, paymentId, sort})`,
+"search_payments" = search payments within documents (data: {page, pageSize, type:[], paymentTypes:[], fromDate, toDate, paymentId, sort})
+
+Emailing and payments (0.5.0): the API has no separate send or add-payment call (POST /documents/{id}/send and /documents/{id}/payment are 404, no such route, verified 2026-10-28). To email a document, put addresses in client.emails on "create" (the download link goes to them; emailContent and attachment control the mail). To record payment against an invoice, create a receipt (400) with payment rows and linkedDocumentIds:[invoiceId]. To share an existing document, use "download_links".`,
     {
-      action: z.enum(["search", "get", "create", "update", "close", "open", "send", "download_links", "add_payment", "preview", "get_linked", "get_info", "get_types", "get_statuses", "search_payments"])
+      action: z.enum(["search", "get", "create", "update", "close", "open", "download_links", "preview", "get_linked", "get_info", "get_types", "get_statuses", "search_payments"])
         .describe("Action to perform"),
       data: z.string().optional().describe("JSON string of request parameters"),
     },
@@ -232,18 +249,8 @@ Actions:
           return json(await client.post(`/documents/${id}/close`));
         case "open":
           return json(await client.post(`/documents/${id}/open`));
-        case "send": {
-          const body: Record<string, unknown> = {};
-          if (data?.email) body.email = data.email;
-          return json(await client.post(`/documents/${id}/send`, body));
-        }
         case "download_links":
           return json(await client.get(`/documents/${id}/download/links`));
-        case "add_payment": {
-          const body = { ...data };
-          delete body.id;
-          return json(await client.post(`/documents/${id}/payment`, body));
-        }
         case "preview":
           return json(await client.post("/documents/preview", data));
         case "get_linked":
@@ -512,17 +519,16 @@ Actions:
 
   server.tool(
     "payment",
-    `Manage payments and payment links. ${PAYMENT_TYPES}.
+    `Collect payments: hosted payment forms and saved credit-card tokens. ${PAYMENT_TYPES}.
 
 Actions:
 "get_form" = get payment form URL for online payment (data: {type, description, lang, currency, vatType, amount, maxPayments, pluginId, group, client:{...}, income:[...], remarks, successUrl, failureUrl, notifyUrl, custom})
 "search_tokens" = search saved credit card tokens (data: {paymentNumber, cardHolder, externalKey})
 "charge_token" = charge a saved credit card token (data: {"id":"tokenId", type, description, lang, currency, vatType, amount, maxPayments, income:[...], remarks, notifyUrl})
-"create_link" = create payment link (data: {client:{...}, income:[...], currency, lang, remarks})
-"get_link" = get payment link details (data: {"id":"..."})
-"get_link_status" = check payment link status (data: {"id":"..."})`,
+
+Payment links (create_link/get_link/get_link_status) were removed in 0.5.0: /payment/links is 404, no such route, and the official spec has none (verified 2026-10-28). Use "get_form" for a shareable hosted payment page, or paymentRequestData on document "create".`,
     {
-      action: z.enum(["get_form", "search_tokens", "charge_token", "create_link", "get_link", "get_link_status"])
+      action: z.enum(["get_form", "search_tokens", "charge_token"])
         .describe("Action to perform"),
       data: z.string().optional().describe("JSON string of request parameters"),
     },
@@ -539,12 +545,6 @@ Actions:
           delete body.id;
           return json(await client.post(`/payments/tokens/${id}/charge`, body));
         }
-        case "create_link":
-          return json(await client.post("/payment/links", data));
-        case "get_link":
-          return json(await client.get(`/payment/links/${id}`));
-        case "get_link_status":
-          return json(await client.get(`/payment/links/${id}/status`));
         default:
           throw new Error(`Unknown action: ${action}`);
       }
@@ -555,26 +555,32 @@ Actions:
 
   server.tool(
     "webhook",
-    `Manage webhook subscriptions. Available events: document.created, document.updated, document.sent, document.paid, document.overdue, payment.received, payment.failed, payment.refunded, client.created, client.updated, client.deleted.
+    `Webhook reference and delivery verification. Webhooks are configured in the morning web app (Developer Tools > Webhooks, ${WEBHOOK_SETTINGS_URL}), not through the API: there are no webhook endpoints (/webhooks is 404, verified 2026-10-28). Deliveries are an HTTP POST with a JSON body and headers x-webhook-topic, x-webhook-id, x-webhook-delivery-id, x-webhook-timestamp, x-correlation-id, and x-webhook-signature when a secret is set. Acknowledge with 200/201/202/204; after 15 failed deliveries the webhook goes inactive.
 
 Actions:
-"create" = create webhook (data: {"url":"https://...", "events":["document.created",...]})
-"get" = get webhook by ID (data: {"id":"..."})
-"delete" = delete webhook (data: {"id":"..."})`,
+"list_events" = the event topics you can subscribe to
+"verify_signature" = check a delivery's x-webhook-signature (HMAC-SHA256 of the RAW body, hex, keyed with the webhook secret). data: {"body":"<raw body exactly as received>", "signature":"<x-webhook-signature>", "secret":"<webhook secret>"}`,
     {
-      action: z.enum(["create", "get", "delete"]).describe("Action to perform"),
+      action: z.enum(["list_events", "verify_signature"]).describe("Action to perform"),
       data: z.string().optional().describe("JSON string of request parameters"),
     },
     async ({ action, data: raw }) => {
       const data = parseData(raw) as Record<string, unknown> | undefined;
-      const id = data?.id as string | undefined;
       switch (action) {
-        case "create":
-          return json(await client.post("/webhooks", data));
-        case "get":
-          return json(await client.get(`/webhooks/${id}`));
-        case "delete":
-          return json(await client.delete(`/webhooks/${id}`));
+        case "list_events":
+          return json({ configureAt: WEBHOOK_SETTINGS_URL, events: WEBHOOK_EVENTS });
+        case "verify_signature": {
+          const body = data?.body as string | undefined;
+          const signature = data?.signature as string | undefined;
+          const secret = data?.secret as string | undefined;
+          if (body === undefined || !signature || !secret) {
+            throw new Error("verify_signature needs data.body (raw), data.signature and data.secret");
+          }
+          const expected = createHmac("sha256", secret).update(body, "utf8").digest("hex");
+          const a = Buffer.from(expected);
+          const b = Buffer.from(signature.trim().toLowerCase());
+          return json({ valid: a.length === b.length && timingSafeEqual(a, b) });
+        }
         default:
           throw new Error(`Unknown action: ${action}`);
       }

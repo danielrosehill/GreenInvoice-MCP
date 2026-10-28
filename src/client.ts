@@ -9,10 +9,11 @@ export const PRODUCTION_BASE = "https://api.greeninvoice.co.il/api/v1";
 export const SANDBOX_BASE = "https://sandbox.d.greeninvoice.co.il/api/v1";
 export const OAUTH_PRODUCTION = "https://api.morning.co/idp/v1/oauth/token";
 export const OAUTH_SANDBOX = "https://api.sandbox.morning.dev/idp/v1/oauth/token";
-// File uploads go through a separate API-gateway service that hands out presigned S3 POSTs.
-// Verified 2026-10-21 with an OAuth token: GET .../url?context=expense&data={"source":5}
-// returns {url, fields{15}, maxFileSize}. Sandbox equivalent unknown.
-export const FILE_UPLOAD_URL = "https://apigw.greeninvoice.co.il/file-upload/v1/url";
+// File uploads go through a separate service that hands out presigned S3 POSTs.
+// GET .../url?context=expense&data={"source":5} returns {url, fields, maxFileSize}.
+// The official spec documents api.morning.co (sandbox: api.sandbox.d.greeninvoice.co.il);
+// both it and the older apigw.greeninvoice.co.il host answered 200 on 2026-10-28.
+export const FILE_UPLOAD_URL = "https://api.morning.co/file-upload/v1/url";
 
 const TOKEN_TTL_MS = 25 * 60 * 1000; // 25 minutes (OAuth tokens last 60 min, legacy ~30)
 const MIN_REQUEST_INTERVAL_MS = 350; // ~3 req/s rate limit

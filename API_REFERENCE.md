@@ -1,13 +1,13 @@
 # Green Invoice API Reference
 
-> Source: [Apiary Blueprint](https://jsapi.apiary.io/apis/greeninvoice.json) | Last updated: 2026-03-11  
+> Source: [morning official OpenAPI spec](https://developers.morning.co/docs/openapi.bundled.json) (snapshot: [`spec/morning-openapi.json`](spec/morning-openapi.json)), checked against the live API 2026-10-28. Endpoints marked *undocumented* are not in that spec but answered on that date. The old Apiary blueprint is gone (404).  
 > Production base: `https://api.greeninvoice.co.il/api/v1/`  
 > Sandbox base: `https://sandbox.d.greeninvoice.co.il/api/v1/` — mirrors every path below, but is a **separate tenancy: production keys get `401` there**. See [docs/sandbox.md](docs/sandbox.md).  
 > Reference data base: `https://cache.greeninvoice.co.il/`
 
-## Endpoints (66 total)
+## Endpoints (64 total)
 
-### Businesses (10)
+### Businesses (10, undocumented: not in the official spec; GET routes verified live 2026-10-28)
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -56,7 +56,7 @@
 | DELETE | /items/{id} | Delete item |
 | POST | /items/search | Search items |
 
-### Documents (15)
+### Documents (13)
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -73,8 +73,6 @@
 | GET | /documents/templates | Get document templates |
 | GET | /documents/types?lang= | Get document types |
 | GET | /documents/statuses?lang= | Get document statuses |
-| POST | /documents/{id}/payment | Add payment to document |
-| POST | /documents/{id}/send | Send document via email |
 
 ### Expenses (13)
 
@@ -201,7 +199,7 @@ ILS, USD, EUR, GBP, JPY, CHF, CNY, AUD, CAD, DKK, NOK, ZAR, SEK, CZK, IMP, JOD, 
 - Document types 320, 400, 405 **require** a payment array
 - Payment dates cannot be in the future for receipt-type documents
 - Set `client.add = true` to auto-create a client during document creation
-- JWT tokens last ~30 minutes; re-authenticate via `POST /account/token` with `{id, secret}`
+- OAuth access tokens last 60 minutes: `POST https://api.morning.co/idp/v1/oauth/token` with `{"grant_type":"client_credentials","client_id","client_secret"}` (see [docs/auth.md](docs/auth.md)). The legacy `POST /account/token` is 404.
 - Rate limit: ~3 requests/second
 - Only inactive clients/suppliers can be deleted
 - Expenses cannot be updated once reported (status=20)

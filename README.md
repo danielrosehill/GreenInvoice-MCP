@@ -6,15 +6,15 @@ An MCP (Model Context Protocol) server that provides AI assistants with access t
 
 ## Features
 
-- **Full API coverage** -- All 66 Green Invoice API endpoints across 10 consolidated tools
-- **Documents** -- Create, search, update, close, reopen, send, preview invoices, receipts, quotes, and all document types
+- **Full API coverage** -- Every operation in the [official morning OpenAPI spec](https://developers.morning.co/api), plus working undocumented business endpoints, across 11 consolidated tools
+- **Documents** -- Create (and email, via `client.emails`), search, close, reopen, preview invoices, receipts, quotes, and all document types
 - **Clients** -- Full client management (CRUD, search, merge, balance, document association)
 - **Suppliers** -- Supplier management for expense tracking (CRUD, search, merge)
 - **Items** -- Product/service catalog management
 - **Expenses** -- Expense tracking, drafts, accounting classifications
-- **Payments** -- Payment forms, credit card tokens, payment links
-- **Webhooks** -- Manage webhook subscriptions
-- **Account & Business** -- Account info, settings, business config, numbering, file uploads
+- **Payments** -- Hosted payment forms, credit card tokens
+- **Webhooks** -- Event list and delivery signature verification (webhooks themselves are set up in the morning web app)
+- **Account & Business** -- Business config, numbering, file uploads
 - **Reference Data** -- Business categories, countries, cities, exchange rates
 - **Sandbox** -- Create test documents in Green Invoice's test environment without touching the real books
 - Automatic JWT token management with caching and refresh
@@ -146,21 +146,21 @@ claude plugins marketplace add danielrosehill/Claude-Code-Plugins
 claude plugins install greeninvoice-ops@danielrosehill
 ```
 
-## Available Tools (11 consolidated tools, 66 endpoints)
+## Available Tools (11 consolidated tools)
 
 Each tool uses an `action` parameter to select the operation, and a `data` JSON string for request parameters.
 
 | Tool | Actions | Description |
 |------|---------|-------------|
-| `account` | get, settings | Account info and settings |
+| `account` | get | Account info (403 for API-key auth on accounts tested; prefer `business get`) |
 | `business` | list, get, update, get_numbering, set_numbering, get_footer, get_types, upload_file, delete_file | Business configuration and management |
-| `document` | search, get, create, update, close, open, send, download_links, add_payment, preview, get_linked, get_info, get_types, get_statuses, search_payments | Full document lifecycle (invoices, receipts, quotes, etc.) |
+| `document` | search, get, create, update, close, open, download_links, preview, get_linked, get_info, get_types, get_statuses, search_payments | Full document lifecycle (invoices, receipts, quotes, etc.) |
 | `client` | search, get, create, update, delete, associate_docs, merge, update_balance | Client management |
 | `supplier` | search, get, create, update, delete, merge | Supplier management (for expenses) |
 | `item` | search, get, create, update, delete | Product/service catalog |
 | `expense` | search, get, create, update, delete, open, close, get_statuses, get_classifications, search_drafts | Expense tracking and reporting |
-| `payment` | get_form, search_tokens, charge_token, create_link, get_link, get_link_status | Online payments and payment links |
-| `webhook` | create, get, delete | Webhook subscriptions |
+| `payment` | get_form, search_tokens, charge_token | Hosted payment forms and saved card tokens |
+| `webhook` | list_events, verify_signature | Webhook events and delivery verification (configure webhooks in the web app) |
 | `reference_data` | occupations, countries, cities, currencies | Reference/lookup data (no auth required) |
 | `sandbox` | status, create_test_document, seed, create_document, preview_document, get_document, search_documents, download_links, create_test_client, search_clients, request | Test documents in the sandbox environment |
 
@@ -234,12 +234,14 @@ There is no RFQ (request-for-quotation) document type — quotations are outboun
 
 ## API Reference
 
-See [API_REFERENCE.md](API_REFERENCE.md) for the complete endpoint reference (66 endpoints), enum codes, and field documentation. Sourced from the [Apiary blueprint](https://www.greeninvoice.co.il/api-docs/), last updated 2026-03-11.
+See [API_REFERENCE.md](API_REFERENCE.md) for the endpoint reference, enum codes, and field documentation. The authoritative source is morning's official OpenAPI spec ([docs](https://developers.morning.co/api), [JSON](https://developers.morning.co/docs/openapi.bundled.json)); a dated snapshot lives in [`spec/morning-openapi.json`](spec/morning-openapi.json) so changes can be diffed (`oasdiff changelog spec/morning-openapi.json <new>`).
 
 ## MCP Validation Notes
 
+- **28/10/2026** (0.5.0): checked against morning's official OpenAPI spec (`https://developers.morning.co/docs/openapi.bundled.json`, 3.0.3, info.version 2.0.0, 54 operations) and the live API. Every spec operation was already covered. Removed actions whose routes do not exist: `document send` and `add_payment` (`/documents/{id}/send`, `/documents/{id}/payment`), `payment create_link`/`get_link`/`get_link_status` (`/payment/links`), `account settings` (`/account/settings`), and the old `webhook create/get/delete` (`/webhooks`). Method: a GET to a real POST-only route answers `405` (e.g. `/documents/{id}/close`) and a missing record on a real route answers `404 פריט לא נמצא`, while these all gave a bare `404`, the same as a made-up path. CORS `OPTIONS` is no use for this; it lists every method on every path. Webhooks are configured in the web app only, so `webhook` now lists the spec's event topics and verifies `x-webhook-signature` (HMAC-SHA256 of the raw body). Expense file upload moved to the documented host `api.morning.co` (the old `apigw.greeninvoice.co.il` still answers 200). Undocumented but live (200): `GET /businesses`, `/businesses/footer`, `/businesses/numbering`, `/businesses/types`, `/accounting/classifications/map`; kept.
+
 - **21/10/2026** (0.4.0): `expense` gains `upload_file`: `GET https://apigw.greeninvoice.co.il/file-upload/v1/url?context=expense&data={"source":5}` (OAuth bearer) → presigned S3 POST (all fields, file last) → Green Invoice OCRs it into an expense draft (`search_drafts`), or attaches it to an existing expense with `expenseId`. Accepts base64 or a URL the server fetches (e.g. the Gmail MCP's attachment link on the same Docker network).
-- **21/10/2026** (0.3.2): every call failed with `Auth failed (404):`. Green Invoice (morning) moved token issuing to OAuth client-credentials at `POST https://api.morning.co/idp/v1/oauth/token`; the old `/account/token` now 404s for every key. Existing API keys work unchanged; API calls stay on `api.greeninvoice.co.il/api/v1`. The client now uses OAuth first and falls back to the legacy route. Verified against production (`/businesses/me` → DSR Holdings). See [docs/auth.md](docs/auth.md).
+- **21/10/2026** (0.3.2): every call failed with `Auth failed (404):`. Green Invoice (morning) moved token issuing to OAuth client-credentials at `POST https://api.morning.co/idp/v1/oauth/token`; the old `/account/token` now 404s for every key. Existing API keys work unchanged; API calls stay on `api.greeninvoice.co.il/api/v1`. The client now uses OAuth first and falls back to the legacy route. Verified against production (`/businesses/me` → 200). See [docs/auth.md](docs/auth.md).
 - **25/07/2026**: Added the `sandbox` tool (11th tool) for creating test documents. Probed the sandbox environment directly: base URL and all 66 paths are live, and `GET /documents/types` answers `200` unauthenticated, but a **valid production key pair is rejected with `401`** — identical response to a bogus key — confirming the sandbox is a separate tenancy needing its own account and keys. Sandbox web app is at `https://app.sandbox.d.greeninvoice.co.il/` (302 from the sandbox root). Payload generation is covered offline by `scripts/check-test-payloads.mjs`; end-to-end document creation is **untested** pending sandbox credentials. See [docs/sandbox.md](docs/sandbox.md).
 - **03/04/2026**: Consolidated from 29 individual tools to 10 resource-based tools. Added full API coverage (66 endpoints) including suppliers, expenses, payments, partners reference data, and previously missing document/business/client endpoints. API spec sourced from Apiary blueprint (updated 2026-03-11).
 - **01/04/2026**: Validated against the [Green Invoice API docs](https://www.greeninvoice.co.il/api-docs/). Basic business document functions tested: create invoice/receipt, issue. All tools worked as expected.
